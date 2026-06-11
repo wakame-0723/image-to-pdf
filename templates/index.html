@@ -4,7 +4,7 @@
     <title>Image to PDF</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <!-- ✅ CSS読み込み -->
+    <!-- CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 
@@ -27,6 +27,7 @@
 
     <button type="submit">PDFに変換</button>
 
+    <!-- 進捗バー -->
     <div id="progress-container" style="display:none; margin-top:20px;">
         <div style="width:80%; margin:auto; background:#ddd; border-radius:5px;">
             <div id="progress-bar" style="width:0%; height:20px; background:#4a90e2; border-radius:5px;"></div>
@@ -42,6 +43,11 @@ const fileInput = document.getElementById("fileElem");
 const form = document.querySelector("form");
 const button = form.querySelector("button");
 
+// ダウンロードエリア
+const downloadArea = document.createElement("div");
+downloadArea.style.marginTop = "20px";
+document.body.appendChild(downloadArea);
+
 // ローディング
 const loading = document.createElement("div");
 loading.innerHTML = "⏳ 処理中...";
@@ -56,7 +62,7 @@ dropArea.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", () => showPreview(fileInput.files));
 
 // ドラッグ
-dropArea.addEventListener("dragover", e => {
+dropArea.addEventListener("dragover", (e) => {
     e.preventDefault();
     dropArea.classList.add("dragover");
 });
@@ -66,7 +72,7 @@ dropArea.addEventListener("dragleave", () => {
 });
 
 // ドロップ
-dropArea.addEventListener("drop", e => {
+dropArea.addEventListener("drop", (e) => {
     e.preventDefault();
     dropArea.classList.remove("dragover");
 
@@ -76,14 +82,14 @@ dropArea.addEventListener("drop", e => {
     showPreview(files);
 });
 
-// ✅ プレビュー
+// ✅ サムネイル表示
 function showPreview(files) {
     dropArea.innerHTML = `📂 ${files.length}個のファイル<br><br>`;
 
     for (let file of files) {
         const reader = new FileReader();
 
-        reader.onload = e => {
+        reader.onload = (e) => {
             const div = document.createElement("div");
             div.style.display = "inline-block";
             div.style.margin = "5px";
@@ -106,9 +112,14 @@ function showPreview(files) {
     }
 }
 
-// ✅ 送信
-form.addEventListener("submit", e => {
+// ✅ 送信処理
+form.addEventListener("submit", (e) => {
     e.preventDefault();
+
+    if (fileInput.files.length === 0) {
+        alert("画像を選択してください");
+        return;
+    }
 
     const formData = new FormData(form);
     const xhr = new XMLHttpRequest();
@@ -119,11 +130,13 @@ form.addEventListener("submit", e => {
 
     progressContainer.style.display = "block";
     loading.style.display = "block";
+    downloadArea.innerHTML = "";
 
     button.disabled = true;
     button.textContent = "処理中...";
 
-    xhr.upload.addEventListener("progress", e => {
+    // ✅ アップロード進捗
+    xhr.upload.addEventListener("progress", (e) => {
         if (e.lengthComputable) {
             const percent = Math.round((e.loaded / e.total) * 100);
             progressBar.style.width = percent + "%";
@@ -131,33 +144,60 @@ form.addEventListener("submit", e => {
         }
     });
 
+    // ✅ 完了処理
     xhr.onload = () => {
         loading.style.display = "none";
-        progressText.innerText = "✅ 完了！";
 
         button.disabled = false;
         button.textContent = "PDFに変換";
 
         if (xhr.status === 200) {
-            const blob = new Blob([xhr.response], { type: "application/pdf" });
+            progressText.innerText = "✅ 完了！";
 
-            const link = document.createElement("a");
-            link.href = window.URL.createObjectURL(blob);
+            const blob = new Blob([xhr.response], { type: "application/pdf" });
+            const url = window.URL.createObjectURL(blob);
 
             const userInput = document.getElementById("filename").value;
 
+            let filename;
             if (userInput.trim() !== "") {
-                link.download = userInput + ".pdf";
+                filename = userInput.trim() + ".pdf";
             } else {
                 const first = fileInput.files[0].name;
-                const base = first.split('.').slice(0, -1).join('.');
-                link.download = base + "_merged.pdf";
+                const base = first.split(".").slice(0, -1).join(".");
+                filename = base + "_merged.pdf";
             }
 
-            link.click();
+            // ✅ ダウンロードボタン
+            downloadArea.innerHTML = `
+                <a href="${url}" download="${filename}"
+                   style="
+                       display:inline-block;
+                       padding:12px 20px;
+                       background:#4a90e2;
+                       color:white;
+                       border-radius:5px;
+                       text-decoration:none;
+                       font-size:16px;
+                   ">
+                    📥 PDFをダウンロード
+                </a>
+            `;
+        } else {
+            progressText.innerText = "❌ 変換に失敗しました";
         }
     };
 
+    // ✅ 通信エラー処理
+    xhr.onerror = () => {
+        loading.style.display = "none";
+        progressText.innerText = "❌ 通信エラーが発生しました";
+
+        button.disabled = false;
+        button.textContent = "PDFに変換";
+    };
+
+    // ✅ 送信
     xhr.open("POST", "/convert");
     xhr.responseType = "blob";
     xhr.send(formData);
