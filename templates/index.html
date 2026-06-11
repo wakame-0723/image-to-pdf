@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Image to PDF</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- ✅ CSS読み込み -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<h1>📄 Image to PDF</h1>
+
+<form action="/convert" method="post" enctype="multipart/form-data">
+
+    <div id="drop-area">
+        📂 ここに画像をドラッグ＆ドロップ<br><br>
+        またはクリックして選択
+    </div>
+
+    <input type="text" id="filename" placeholder="ファイル名を入力（任意）">
+
+    <input type="file" id="fileElem" name="images" multiple accept="image/*" hidden>
+
+    <br><br>
+
+    <button type="submit">PDFに変換</button>
+
+    <div id="progress-container" style="display:none; margin-top:20px;">
+        <div style="width:80%; margin:auto; background:#ddd; border-radius:5px;">
+            <div id="progress-bar" style="width:0%; height:20px; background:#4a90e2; border-radius:5px;"></div>
+        </div>
+        <p id="progress-text">0%</p>
+    </div>
+
+</form>
+
+<script>
+const dropArea = document.getElementById("drop-area");
+const fileInput = document.getElementById("fileElem");
+const form = document.querySelector("form");
+const button = form.querySelector("button");
+
+// ローディング
+const loading = document.createElement("div");
+loading.innerHTML = "⏳ 処理中...";
+loading.style.display = "none";
+loading.style.marginTop = "20px";
+document.body.appendChild(loading);
+
+// クリック選択
+dropArea.addEventListener("click", () => fileInput.click());
+
+// ファイル選択
+fileInput.addEventListener("change", () => showPreview(fileInput.files));
+
+// ドラッグ
+dropArea.addEventListener("dragover", e => {
+    e.preventDefault();
+    dropArea.classList.add("dragover");
+});
+
+dropArea.addEventListener("dragleave", () => {
+    dropArea.classList.remove("dragover");
+});
+
+// ドロップ
+dropArea.addEventListener("drop", e => {
+    e.preventDefault();
+    dropArea.classList.remove("dragover");
+
+    const files = e.dataTransfer.files;
+    fileInput.files = files;
+
+    showPreview(files);
+});
+
+// ✅ プレビュー
+function showPreview(files) {
+    dropArea.innerHTML = `📂 ${files.length}個のファイル<br><br>`;
+
+    for (let file of files) {
+        const reader = new FileReader();
+
+        reader.onload = e => {
+            const div = document.createElement("div");
+            div.style.display = "inline-block";
+            div.style.margin = "5px";
+
+            const img = document.createElement("img");
+            img.src = e.target.result;
+            img.style.width = "80px";
+            img.style.borderRadius = "5px";
+
+            const name = document.createElement("div");
+            name.textContent = file.name;
+            name.style.fontSize = "10px";
+
+            div.appendChild(img);
+            div.appendChild(name);
+            dropArea.appendChild(div);
+        };
+
+        reader.readAsDataURL(file);
+    }
+}
+
+// ✅ 送信
+form.addEventListener("submit", e => {
+    e.preventDefault();
+
+    const formData = new FormData(form);
+    const xhr = new XMLHttpRequest();
+
+    const progressContainer = document.getElementById("progress-container");
+    const progressBar = document.getElementById("progress-bar");
+    const progressText = document.getElementById("progress-text");
+
+    progressContainer.style.display = "block";
+    loading.style.display = "block";
+
+    button.disabled = true;
+    button.textContent = "処理中...";
+
+    xhr.upload.addEventListener("progress", e => {
+        if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            progressBar.style.width = percent + "%";
+            progressText.innerText = percent + "%（アップロード中）";
+        }
+    });
+
+    xhr.onload = () => {
+        loading.style.display = "none";
+        progressText.innerText = "✅ 完了！";
+
+        button.disabled = false;
+        button.textContent = "PDFに変換";
+
+        if (xhr.status === 200) {
+            const blob = new Blob([xhr.response], { type: "application/pdf" });
+
+            const link = document.createElement("a");
+            link.href = window.URL.createObjectURL(blob);
+
+            const userInput = document.getElementById("filename").value;
+
+            if (userInput.trim() !== "") {
+                link.download = userInput + ".pdf";
+            } else {
+                const first = fileInput.files[0].name;
+                const base = first.split('.').slice(0, -1).join('.');
+                link.download = base + "_merged.pdf";
+            }
+
+            link.click();
+        }
+    };
+
+    xhr.open("POST", "/convert");
+    xhr.responseType = "blob";
+    xhr.send(formData);
+});
+</script>
+
+</body>
+</html>
